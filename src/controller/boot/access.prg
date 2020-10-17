@@ -17,13 +17,13 @@ RETU SELF
 METHOD Autentica( o ) CLASS Access
 
 	LOCAL oMiddleware		:= o:oMiddleware
-	LOCAL oResponse		:= o:oResponse
+	LOCAL oResponse				:= o:oResponse
 	LOCAL oValidator 		:= TValidator():New()
-	LOCAL hRoles     		:= { 'user' => 'required|string|len:8', 'psw' => 'required' }	
+	LOCAL hRoles     		:= { 'user' => 'required|string|maxlen:8', 'psw' => 'required' }	
 	LOCAL cUser 			:= o:PostValue( 'user' )
-	LOCAL cPsw 			:= o:PostValue( 'psw' )
+	LOCAL cPsw 				:= o:PostValue( 'psw' )
 	LOCAL hReg 
-	LOCAL hUser	 		:= {=>}
+	LOCAL hUser	 			:= {=>}
 	LOCAL hTokenData 		:= {=>}
 	
 	//	IMPORTANTE: En este sistema JWT como enviamos una cookie con el JWT, no podremos hacer
@@ -66,9 +66,10 @@ METHOD Autentica( o ) CLASS Access
 			
 			//	Mostramos página principal
 			
-				_Set( 'menu', '1' )
+				App():Set( 'menu', '1' )
 			
-				o:View( 'boot/principal.view', hTokenData )
+				o:Redirect( Route( 'boot.principal' ) )
+				//o:View( 'boot/principal.view', hTokenData )
 				
 		ELSE
 		
@@ -84,6 +85,7 @@ METHOD logout( o ) CLASS Access
 	
 	oMiddleware:CloseJWT()
 
-	o:View( 'boot/default.view' )
+	o:Redirect( Route( 'boot' ) )
+	//o:View( 'boot/default.view' )
 
 RETU NIL

@@ -10,15 +10,15 @@
 
 CLASS TResponse
 
-   DATA aHeaders				INIT {}
-   DATA cContentType			INIT 'text/plain'
-   DATA cBody					INIT ''
-   DATA nCode					INIT 200 
-   DATA lRedirect				INIT .F.
-   DATA cLocation				INIT ''
-
-   METHOD New() CONSTRUCTOR
-   METHOD Echo() 					//	print(), go(), exec(), out(), ...
+   DATA aHeaders							INIT {}
+   DATA cContentType						INIT 'text/plain'
+   DATA cBody								INIT ''
+   DATA nCode								INIT 200 
+   DATA lRedirect							INIT .F.
+   DATA cLocation							INIT ''
+			
+   METHOD New() 							CONSTRUCTOR
+   METHOD Echo() 							//	print(), go(), exec(), out(), ...
    
    METHOD SetHeader( cHeader, uValue )
    
@@ -50,43 +50,47 @@ METHOD SetHeader( cHeader, cValue ) CLASS TResponse
 
 RETU NIL
 
-METHOD SendJson( uResult, nCode ) CLASS TResponse
+METHOD SendJson( uResult, nCode, cCharset ) CLASS TResponse
 
-	::cContentType 	:= "application/json" 	
-	::cBody 		:= IF( HB_IsHash( uResult ), hb_jsonEncode( uResult ), '' )
+	DEFAULT cCharSet  := 'ISO-8859-1'	//	'utf-8'
+
+	::cContentType 	:= "application/json;charset=" + cCharSet	
+	::cBody 			:= IF( HB_IsHash( uResult ) .or. HB_IsArray( uResult ), hb_jsonEncode( uResult ), '' )
 	
 	::echo()	
 
 RETU NIL
 
-METHOD SendXml( uResult, nCode ) CLASS TResponse
+METHOD SendXml( uResult, nCode, cCharset ) CLASS TResponse
 
-	::cContentType 	:= "text/xml"	
-	::cBody 		:= IF( HB_IsString( uResult ), uResult, '' )
+	DEFAULT cCharSet  := 'ISO-8859-1'	//	'utf-8'
+	
+	::cContentType 	:= "text/xml;charset=" + cCharSet	
+	::cBody 			:= IF( HB_IsString( uResult ), uResult, '' )
 	
 	::echo()	
 
 RETU NIL
 
 METHOD SendHtml( uResult, nCode ) CLASS TResponse
-
-	::cContentType 	:= "text/html"	
-	::cBody 		:= IF( HB_IsString( uResult ), uResult, '' )
-
+	
+	::cContentType 	:= "text/html"
+	::cBody 			:= IF( HB_IsString( uResult ), uResult, '' )
+	
 	::echo()
 
 RETU NIL
 
 METHOD Redirect( cUrl ) CLASS TResponse
 
+	local cHtml := ''
+	
 	
 		//	Tendriamos de decir al controller que cargue el nuevo
 		
-		//? ::cLocation	
-		
-		AP_HeadersOutSet( "Location", cUrl )		
+		//AP_HeadersOutSet( "Location", cUrl )		
 	
-		ErrorLevel( REDIRECTION )	
+		//ErrorLevel( REDIRECTION )	
 		
 		
 		
@@ -98,7 +102,13 @@ METHOD Redirect( cUrl ) CLASS TResponse
 		::Echo()
 		*/
 		
+
+	cHtml += '<script>'
+	cHtml += "window.location.replace( '" + cUrl + "'); "
+	cHtml += '</script>'
+
 		
+	::SendHtml( cHtml )									
 	
 RETU NIL
 
@@ -111,7 +121,7 @@ RETU NIL
 METHOD Echo() CLASS TResponse
 
 	LOCAL aHeader 
-	
+
 	//	La salida de retorno de la respuesta tendra 3 capas de envio:
 	//	Errorlevel
 
@@ -122,12 +132,11 @@ METHOD Echo() CLASS TResponse
 		ENDIF	
 		
 	//	Cabeceras
-	
+
 		FOR EACH aHeader IN ::aHeaders
 
 			//	Si tenemos alguna cookie por enviar, la enviamos...					
-			IF aHeader[1] == 'Set-Cookie'
-			//? 'Envio Cookie...'			
+			IF aHeader[1] == 'Set-Cookie'							
 				AP_HeadersOutSet( "Set-Cookie", aHeader[2] )												
 			ELSE
 				AP_HeadersOutSet( aHeader[1], aHeader[2] )															
@@ -141,9 +150,7 @@ METHOD Echo() CLASS TResponse
 		
 	//	Sino salida del Body...
 
-		AP_RPUTS( ::cBody )						
-
-		
+		AP_RPUTS( ::cBody )								
 
 RETU NIL
 
@@ -171,12 +178,14 @@ METHOD SetCookie( cName, cValue, nSecs, cPath, cDomain, lHttps, lOnlyHttp ) CLAS
 		cCookie += 'path=' + cPath + ';'
 		cCookie += 'domain=' + cDomain + ';'
 		
+
 	//	Pendiente valores logicos de https y OnlyHttp
 
 	//	Envio de la Cookie
 
 		//AP_HeadersOutSet( "Set-Cookie", cCookie )
-		::SetHeader( "Set-Cookie", cCookie )		
+		::SetHeader( "Set-Cookie", cCookie )
+	
 
 RETU NIL
 

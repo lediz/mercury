@@ -8,9 +8,9 @@ CLASS TRoute
 	DATA bLog
 
 	
-	CLASSDATA aMap										INIT {}	
+	CLASSDATA aMap											INIT {}	
 
-	METHOD New() CONSTRUCTOR
+	METHOD New() 											CONSTRUCTOR
 	
 	METHOD Map( cMethod, cId, cRoute, cController ) 
 	METHOD Get( cId, cRoute, cController ) 				INLINE ::Map( 'GET' , cId, cRoute, cController )
@@ -19,14 +19,17 @@ CLASS TRoute
 	METHOD Listen()
 	METHOD Execute()
 	METHOD ShowError( cError )							INLINE ::oApp:ShowError( cError, 'Route Error! ')
+	
+	METHOD GetMapSort()
 
 ENDCLASS
 
 METHOD New( oApp ) CLASS TRoute
 
-	::oApp 			:= oApp
+	::oApp 		:= oApp
 	::oRequest 	:= oApp:oRequest
-	::oResponse 	:= oApp:oResponse
+	::oResponse := oApp:oResponse
+	
 	
 RETU Self
 
@@ -35,6 +38,8 @@ METHOD Map( cMethod, cId, cRoute, cController ) CLASS TRoute
 
 	LOCAL aMethod
 	LOCAL nI
+	
+	DEFAULT cMethod := 'GET,POST'
 
 	IF At( ',', cMethod ) > 0
 
@@ -57,6 +62,13 @@ METHOD Map( cMethod, cId, cRoute, cController ) CLASS TRoute
 	
 
 RETU NIL
+
+METHOD GetMapSort() CLASS TRoute
+	LOCAL aMapSort :=  AClone( ::aMap )
+	
+	ASort( aMapSort,,,{|x,y| x[ MAP_ORDER ] < y[ MAP_ORDER ]} )
+	
+RETU aMapSort
 
 METHOD ListRoute() CLASS TRoute
 
@@ -102,17 +114,29 @@ METHOD Listen() CLASS TRoute
 	LOCAL cMethod 			:= ::oRequest:Method()
 	LOCAL cRoute, aRoute
 	LOCAL cURLQuery 		:= ::oRequest:GetQuery()
-	LOCAL cURLFriendly 	:= ::oRequest:GetUrlFriendly()
+	LOCAL cURLFriendly 		:= ::oRequest:GetUrlFriendly()
 	LOCAL nMask, nOptional, nPosParam, nPosMapingQuery
 	LOCAL cParamsMap, aParamsMap, nParamsMap, aParamsQuery, cParamURL, aParamsURL, cParamsInQuery, nParamsQuery
-	LOCAL uController 	:= ''
+	LOCAL uController 		:= ''
 	LOCAL nJ, nPar
-	LOCAL hParameters 	:= {=>}
+	LOCAL hParameters 		:= {=>}
 	LOCAL cParamName
-	LOCAL aRouteSelect 	:= {}
+	LOCAL aRouteSelect 		:= {}
 	LOCAL lFound 			:= .F.
 	LOCAL cMap, nIni, nFin, bSort
+	LOCAL cUrlDev
+	
+	if substr(lower( cUrlQuery ), 1, 7 ) == 'mercury' 
 
+		cUrlDev := TApp():cUrl + '/lib/mercury/mercury_dev/'
+				
+		AP_HeadersOutSet( "Location", cUrlDev + 'm_main'  )
+		ErrorLevel( 302 ) 	//	REDIRECTION 
+		QUIT					
+
+	endif
+	
+	
 	//	Buscamos en la lista de Maps, cualquier RUTA que coincida
 	//	con la Query que nos han pasado. Tambien ha de coincidir
 	//	con el method llamado, que en principio sera GET/POST 
@@ -126,6 +150,12 @@ METHOD Listen() CLASS TRoute
 	
 	//	Analizamos todas las rutas. Inicialmente solo se analizaban las del mismo método
 	//	pero se ha detectado que en una vista se puede pedir Route() de otros metodo.
+	
+	//_GTrace( 'Listen Ini' )
+	
+	if nLen == 0	//No Routes...
+		quit
+	endif
 
 
 	FOR n := 1 TO nLen 
@@ -341,10 +371,7 @@ METHOD Listen() CLASS TRoute
 		
 	NEXT
 	
-	//	Si existe un controlador lo ejecutaremos
-	
-
-	
+	//	Si existe un controlador lo ejecutaremos		
 	
 	IF lFound 
 	
@@ -360,7 +387,7 @@ METHOD Listen() CLASS TRoute
 				::oRequest:LoadRequest()
 				
 			//	-----------------------------
-
+			//_GTrace( 'Listen Found: ' + valtochar( uController)  )
 			
 			::Execute( uController, hParameters, aRouteSelect )
 			
@@ -386,7 +413,7 @@ RETU NIL
 //	En principio TRouter se ejecuta desde la raiz del programa...
 //	En lugar de cojer ap_getenv( path prog), podemos cojer el path del cgi script_filename
 
-METHOD Execute( cController, hParam, aRouteSelect ) CLASS TRoute
+METHOD Execute( cController, hParam, aRouteSelect, lTEST, oNewRequest, oNewResponse ) CLASS TRoute
 
 	//	Por defecto la carpeta de los controladores estara en srv/controller
 	
@@ -403,13 +430,15 @@ METHOD Execute( cController, hParam, aRouteSelect ) CLASS TRoute
     LOCAL cHBheaders2 := App():Path() + "/include"
 	LOCAL z
 	
+	DEFAULT lTEST := .F.
+
 	LOG ' '
 	LOG 'TRoute():Execute()'
 	LOG '=================='
 	LOG 'Headers: ' + cHBheaders2
 	
 	LOG 'Exec: ' + cController
-	
+
 	//	Chequeamos de que tipo es el controller
 	//	tipo clase -> @
 	//	tipo function -> ()
@@ -455,6 +484,7 @@ METHOD Execute( cController, hParam, aRouteSelect ) CLASS TRoute
 
 	cProg := cPath + cFile
 	
+	
 	LOG 'Program: ' + cProg	
 	LOG 'Tipo Controller: ' +  cType	
 	LOG 'Action: ' + cAction	
@@ -471,16 +501,21 @@ METHOD Execute( cController, hParam, aRouteSelect ) CLASS TRoute
 				cCode := "#include 'hbclass.ch'" + HB_OsNewLine()
 				cCode += "#include 'hboo.ch' " + HB_OsNewLine()  
 				
+				cCode += "STATIC __lAutenticate" + HB_OsNewLine()
 				cCode += "FUNCTION __RunController( o )" + HB_OsNewLine()  
-				cCode += "	LOCAL oC := " + cNameClass + "():New( o )" + HB_OsNewLine() 
+				cCode += "	LOCAL oC"  + HB_OsNewLine() 
+				cCode += "	__lAutenticate := .T." + HB_OsNewLine()  
+				cCode += "	oC := " + cNameClass + "():New( o )" + HB_OsNewLine() 
 				
-				IF !Empty( cAction )
-				
+				IF !Empty( cAction )				
+			
 					cCode += "	IF __objHasMethod( oC, '" + cAction + "' ) "  + HB_OsNewLine() 
-					cCode += "		oC:" + cAction + "(o) "  + HB_OsNewLine() 
+					cCode += "		IF __lAutenticate" + + HB_OsNewLine() 
+					cCode += "		    oC:" + cAction + "(o) "  + HB_OsNewLine() 
+					cCode += "		ENDIF" + HB_OsNewLine() 
 					cCode += "	ELSE "  + HB_OsNewLine() 
-					cCode += "		App():ShowError( 'Método <b>" + cAction  + "()</b> no definido en el controller " + cFile + "', 'TController Error!' ) "  + HB_OsNewLine() 				
-					cCode += "		QUIT "  + HB_OsNewLine() 				
+					cCode += "		App():ShowError( 'Method <b>" + cAction  + "()</b> not defined in " + cFile + " controller.', 'Controller Error!' ) "  + HB_OsNewLine() 				
+					//cCode += "		QUIT "  + HB_OsNewLine() 				
 					cCode += "	ENDIF "  + HB_OsNewLine() 
 				
 				ENDIF
@@ -492,18 +527,19 @@ METHOD Execute( cController, hParam, aRouteSelect ) CLASS TRoute
 				cCode := memoread( cProg )
 
 		ENDIF
-	
+		
 		//	-----------------------------------
 
 		oTController 						:= TController():New( cAction, hParam )
 		oTController:oRoute  				:= SELF
-		oTController:oRequest  				:= ::oRequest
-		oTController:oResponse 				:= ::oResponse		
-		oTController:oMiddleware			:= App():oMiddleware
-		oTController:aRouteSelect  			:= aRouteSelect		
+		oTController:oRequest  			:= ::oRequest
+		oTController:oResponse 			:= App():oResponse 		
+		oTController:oMiddleware		:= App():oMiddleware
+		oTController:aRouteSelect  		:= aRouteSelect	
+		
+		App():oRequest := ::oRequest	//	Si no, TValidator no captura bien el App():oRequest
 		
 		oTController:InitView()
-		
 			
 			IF valtype( ::bLog ) == 'B'
 				Eval( ::bLog, oTController, cAction )
@@ -516,15 +552,23 @@ METHOD Execute( cController, hParam, aRouteSelect ) CLASS TRoute
 
 		oInfo[ 'file' ] := cFile
 		oInfo[ 'code' ] := cCode
- 
+		
+		
+		
 		WHILE zReplaceBlocks( @cCode, ("{"+"%"), ("%"+"}"), oInfo, oTController )	
+	
 		END						
 
-		zExecute( cCode, oInfo, oTController )
+		IF lTEST
+
+		ELSE
+
+			zExecute( cCode, oInfo, oTController )
+		ENDIF
 
 	ELSE
 	
-		::ShowError( 'No existe controller ==> <strong> ' + cFile + '</strong>' )
+		::ShowError( "Doesn't exist controller ==> <strong> " + cFile + '</strong>' )
 		LOG 'Error: No existe Controller: ' + cFile 
 	
 	ENDIF
@@ -656,3 +700,46 @@ FUNCTION RouteError( hError )
 	QUIT
 	
 RETU NIL
+
+static function M_Menu() 
+
+	local c := ''
+
+	
+	TEXT TO  c 
+
+		<h1>Mercury assitance...</h1><hr>
+		<ul style="list-style-type:disc;">
+			<li><a href="mercury_init" >Mercury Init</a></li>
+			<li><a href="#t1">Test 1</a></li>
+			<li><a href="#t3">Test 3</a></li>
+		</ul>
+		
+		<script>
+			function t2() {
+				alert('ep')
+			}
+		</script>
+		
+		
+	ENDTEXT
+	
+	?? c
+
+retu nil
+
+static function M_Test() 
+
+	local c := ''
+
+	
+	TEXT TO  c 
+
+		<h1>Mercury assitance...</h1><hr>
+		Test !
+
+	ENDTEXT
+	
+	?? c
+
+retu nil

@@ -15,14 +15,14 @@ RETU App():oData:aVar
 
 CLASS TData
 
-   DATA aVar 							INIT {=>}
+   DATA aVar 								INIT {=>}
 
-   METHOD  New() CONSTRUCTOR
+   METHOD  New() 							CONSTRUCTOR
    
    METHOD  Set( cKey, uValue ) 			INLINE ::aVar[ lower(cKey) ] := uValue 
    METHOD  Get( cKey, uKey ) 				
-   METHOD  GetAll() 					INLINE ::aVar
-   METHOD  show() 						INLINE ::aVar
+   METHOD  GetAll() 						INLINE ::aVar
+   METHOD  show() 							INLINE ::aVar
 
 ENDCLASS
 
@@ -38,7 +38,7 @@ METHOD  Get( cKey, uKey ) CLASS TData
 
 	IF hb_HHasKey( ::aVar, cKey )	
 	
-	ckey := lower( cKey )
+		ckey := lower( cKey )
 	
 		uValue := ::aVar[ cKey ]
 	

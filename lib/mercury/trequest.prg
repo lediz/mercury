@@ -1,44 +1,52 @@
 
-
 CLASS TRequest
 
-	DATA hGet								INIT {=>}
-	DATA hPost								INIT {=>}
-	DATA hHeaders							INIT {=>}
-	DATA hCookies							INIT {=>}
-	DATA hRequest							INIT {=>}
-	DATA hCgi								INIT {=>}
-	
-	METHOD New() CONSTRUCTOR
-	METHOD Method()							INLINE AP_GetEnv( 'REQUEST_METHOD' )
-	METHOD Get( cKey, uDefault, cType )	
-	METHOD GetAll()							INLINE ::hGet
-	
-	METHOD SetPost( cKey, uValue )	
-	METHOD Post( cKey, uDefault, cType )	
-	METHOD PostAll()							INLINE ::hPost
-	
-	METHOD Cgi ( cKey )	
-	METHOD CountGet()							INLINE len( ::hGet )
-	METHOD CountPost()							INLINE len( ::hPost )
-	METHOD LoadGet()
-	METHOD LoadPost()
-	METHOD LoadRequest()
-	METHOD LoadHeaders()
-	METHOD GetQuery()
-	METHOD GetUrlFriendly()   
-	METHOD GetCookie( cKey )					INLINE HB_HGetDef( ::hCookies, cKey, '' ) 
-	METHOD Request( cKey, uDefault, cType )
-	METHOD RequestAll()						INLINE ::hRequest
+	DATA hGet											INIT {=>}
+	DATA hPost											INIT {=>}
+	DATA hHeaders										INIT {=>}
+	DATA hCookies										INIT {=>}
+	DATA hRequest										INIT {=>}
+	DATA hCgi											INIT {=>}
+		
+	METHOD New() CONSTRUCTOR	
+	METHOD Method()									INLINE AP_GetEnv( 'REQUEST_METHOD' )
+	METHOD Get( cKey, uDefault, cType )		
+	METHOD GetAll()									INLINE ::hGet
+		
+	METHOD SetPost( cKey, uValue )		
+	METHOD Post( cKey, uDefault, cType )		
+	METHOD PostAll()									INLINE ::hPost
+		
+	METHOD Cgi ( cKey )		
+	METHOD CountGet()									INLINE len( ::hGet )
+	METHOD CountPost()								INLINE len( ::hPost )
+	METHOD LoadGet()	
+	METHOD LoadPost()	
+	METHOD LoadRequest()	
+	METHOD LoadHeaders()	
+	METHOD GetQuery()	
+	METHOD GetUrlFriendly()   	
+	METHOD GetCookie( cKey )							INLINE HB_HGetDef( ::hCookies, cKey, '' ) 
+	METHOD GetHeader( cKey )							INLINE HB_HGetDef( ::hHeaders, cKey, '' ) 
+	METHOD Request( cKey, uDefault, cType )	
+	METHOD RequestAll()								INLINE ::hRequest
 	METHOD ValueToType( uValue, cType )
+	
+	METHOD GetStamp( cKey )
 
 ENDCLASS
 
-METHOD New() CLASS TRequest
-		
-	::LoadGet()	
-	::LoadPost()
-	::LoadHeaders()
+METHOD New( lRedirect ) CLASS TRequest
+
+	DEFAULT lRedirect := .F.
+	
+	IF lRedirect
+
+	ELSE
+		::LoadGet()	
+		::LoadPost()
+		::LoadHeaders()
+	ENDIF
 
 return Self
 
@@ -54,7 +62,7 @@ METHOD Get( cKey, uDefault, cType ) CLASS TRequest
 	HB_HCaseMatch( ::hGet, .F. )	
 
 	IF !empty(cKey) .AND. hb_HHasKey( ::hGet, cKey )
-		uValue := hb_UrlDecode(::hGet[ cKey ])
+		uValue := if( valtype( ::hGet[ cKey ] ) == 'A', Aeval( ::hGet[ cKey ], {|u| u :=  hb_UrlDecode(u)} ) , hb_UrlDecode( ::hGet[ cKey ] ) )
 	ELSE
 		uValue := uDefault
 	ENDIF
@@ -75,7 +83,8 @@ METHOD Post( cKey, uDefault, cType ) CLASS TRequest
 	HB_HCaseMatch( ::hPost, .F. )
 
 	IF hb_HHasKey( ::hPost, cKey )
-		uValue := hb_UrlDecode(::hPost[ cKey ])
+		//uValue := hb_UrlDecode(::hPost[ cKey ])
+		uValue := if( valtype( ::hPost[ cKey ] ) == 'A', Aeval( ::hPost[ cKey ], {|u| u :=  hb_UrlDecode(u)} ) , hb_UrlDecode( ::hPost[ cKey ] ) )
 	ELSE
 		uValue := uDefault
 	ENDIF
@@ -121,9 +130,13 @@ RETU uValue
 
 METHOD ValueToType( uValue, cType ) CLASS TRequest
 
+	__defaultNIL( @uValue, '' )
+	__defaultNIL( @cType, '' )
+
 	DO CASE
 		CASE cType == 'C'
 		CASE cType == 'N'; uValue := If( valtype(uValue) == 'N', uValue, Val( uValue ) )
+		CASE cType == 'L'; uValue := If( valtype(uValue) == 'L', uValue, IF( lower( valtochar(uValue) ) == 'true', .T., .F. ) )
 	ENDCASE
 
 RETU uValue 
@@ -151,6 +164,13 @@ RETU NIL
 
 METHOD LoadGet() CLASS TRequest
 
+	::hGet	:= ZAP_GetPairs()
+	
+RETU NIL
+
+/*
+METHOD LoadGet() CLASS TRequest
+
 	LOCAL cArgs := AP_Args()
 	LOCAL cPart, nI
 	
@@ -171,7 +191,15 @@ METHOD LoadGet() CLASS TRequest
 	ENDIF 
 
 RETU NIL
+*/
 
+METHOD LoadPost() CLASS TRequest
+
+	::hPost := ZAP_PostPairs()
+	
+RETU NIL
+
+/*
 METHOD LoadPost() CLASS TRequest
 
 	LOCAL hPost := AP_PostPairs()
@@ -202,6 +230,7 @@ METHOD LoadPost() CLASS TRequest
 	ENDIF 
 
 RETU NIL
+*/
 
 METHOD Cgi( cKey ) CLASS TRequest
 
@@ -241,8 +270,6 @@ METHOD GetQuery() CLASS TRequest
 
 	cPath := _cFilePath( ::Cgi( 'SCRIPT_NAME' ) )
 	
-	//LOG 'GetQuery() Path: ' + cPath
-	
 	n := At( cPath, ::Cgi( 'REQUEST_URI' ) )
 	
 	cQuery := Substr( ::Cgi( 'REQUEST_URI' ), n + len( cPath ) ) 
@@ -254,6 +281,7 @@ METHOD GetQuery() CLASS TRequest
 RETU cQuery
 
 METHOD LoadHeaders() CLASS TRequest
+
 	LOCAL nLen := AP_HeadersInCount() - 1 
 	LOCAL n, nJ, cKey, cPart, uValue
 	
@@ -300,8 +328,105 @@ METHOD LoadHeaders() CLASS TRequest
 
 RETU NIL
 
-//	SetCookie() en oResponse
+//	----------------------------------------------------------------------------
 
+METHOD GetStamp( cKey, cPsw ) CLASS TRequest
+
+	LOCAL cToken 	:= ::Request( cKey )
+	//LOCAL hToken	:= __wDecrypt( cToken )
+	LOCAL hData 	:= NIL
+	LOCAL oJWT
+	
+	DEFAULT cPsw := 'HWeB!2019v1'
+	
+	oJWT := JWT():New( cPsw )		
+
+	oJWT:Decode( cToken )	
+	
+	if oJWT:Decode( cToken ) 
+		hData := oJWT:GetData()
+	endif	
+	
+	SetSecure( cKey, hData )
+
+RETU hData
+
+//	----------------------------------------------------------------------------
+
+
+function __wCrypt( hKey, cFeed )
+
+	local a,cKey 
+	
+	DEFAULT cFeed := 'mykey' 
+
+	a 		:= hb_base64Encode( hb_jsonencode( hKey ) )
+	cKey 	:= hb_base64Encode( HB_MD5ENCRYPT( a, cFeed ) )	
+	
+	//	A veces en la codificacion base64 se usa el simbolo + y por la url puede haber lio
+	//	lo susituimos y al recibirlo ya lo dejaremos donde estaba
+	
+		cKey	:= hb_StrReplace( cKey , '+/=', '-_ ' )
+
+retu cKey 
+
+function __wDecrypt( cKey, cFeed )
+
+	local a, hKey
+	
+	DEFAULT cFeed := 'mykey' 	
+
+	cKey	:= hb_StrReplace( cKey , '-_ ', '+/=' )
+	a 		:= HB_MD5DECRYPT( hb_base64Decode( cKey ), cFeed )
+	hKey 	:= hb_jsondecode( hb_base64Decode( a ) )
+	
+retu hKey
+
+function SetSecure( cKey, uData, cPsw )
+
+	local oJWT
+	
+	DEFAULT cKey := ''
+	DEFAULT cPsw := 'HWeB!2019v1'
+	
+	IF empty( cKey )
+		retu ''
+	endif	
+	
+	oJWT := JWT():New( cPsw )	
+	
+	IF PCount() == 2
+	
+		DO CASE
+			CASE valtype( uData ) == 'C'
+				//hKeySecure[ cKey ] := __wCrypt( { 'data' => uData } )
+				
+				oJWT:SetData( { 'data' => uData } )	
+				
+			CASE valtype( uData ) == 'H'
+				//hKeySecure[ cKey ] := __wCrypt( uData )
+				
+				oJWT:SetData( uData )
+			
+			OTHERWISE
+				retu ''
+		ENDCASE						
+		
+	ENDIF
+
+	hKeySecure[ cKey ] := oJWT:Encode()	
+		
+retu ''
+
+function StampSecure( cKey )
+	
+	DEFAULT cKey := ''
+	
+	IF empty( cKey )
+		retu ''
+	endif	
+
+retu  '<input type="hidden" name="' + cKey + '" value="' + hKeySecure[ cKey ] + '">'
 
 
 function _cFilePath( cFile )   // returns path of a filename

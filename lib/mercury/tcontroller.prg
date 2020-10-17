@@ -7,26 +7,28 @@ CLASS TController
 	DATA oResponse	
 	DATA oMiddleware
 	DATA oView
-	DATA cAction 				INIT ''
-	DATA hParam				INIT {=>}
-	DATA aRouteSelect			INIT {=>}
+	DATA cAction 													INIT ''
+	DATA hParam														INIT {=>}
+	DATA aRouteSelect												INIT {=>}
+	DATA lAutenticate												INIT .T.
 
 
 	
 	CLASSDATA oRoute					
 	
-	METHOD New( cAction, hPar ) CONSTRUCTOR
+	METHOD New( cAction, hPar ) 									CONSTRUCTOR
 	METHOD InitView()
 	METHOD View( cFile, ... ) 					
 	METHOD ListController()
 	METHOD ListRoute()											INLINE ::oRoute:ListRoute()
 	
-	METHOD RequestValue 	( cKey, cDefault, cType )			INLINE ::oRequest:Request( cKey, cDefault, cType )
+	METHOD RequestValue 	( cKey, cDefault, cType )				INLINE ::oRequest:Request( cKey, cDefault, cType )
 	METHOD GetValue		( cKey, cDefault, cType )				INLINE ::oRequest:Get	 	( cKey, cDefault, cType )
-	METHOD PostValue		( cKey, cDefault, cType )			INLINE ::oRequest:Post	( cKey, cDefault, cType )
-	
-	//	POdria ser algo mas como Autentica() ???
-	METHOD Middleware		( cValid, cRoute )					
+	METHOD PostValue		( cKey, cDefault, cType )				INLINE ::oRequest:Post	( cKey, cDefault, cType )
+
+	METHOD Middleware		( cType, cRoute, aExceptionMethods, hError  )					
+
+	METHOD Redirect		( cRoute )
 
 	
 ENDCLASS 
@@ -38,15 +40,34 @@ METHOD New( cAction, hPar  ) CLASS TController
 
 RETU Self
 
-METHOD Middleware( cType, cRoute, cargo ) CLASS TController
+METHOD Middleware( cType, cRoute, aExceptionMethods, hError, lJson ) CLASS TController
 
-	DEFAULT cType		:= ''
-	DEFAULT cRoute 	:= ''
-	DEFAULT cargo  	:= ''
+	local nPos := 0
+
+	DEFAULT cType					:= 'jwt'
+	DEFAULT cRoute 				:= ''
+	DEFAULT aExceptionMethods  	:= array()
+	DEFAULT hError  				:= { 'success' => .f., 'error' => 'Error autentication' }
+	DEFAULT lJson  				:= .F.
+	
+	//	If exist some exception, don't autenticate
+
+		nPos := Ascan( aExceptionMethods, {|x,y| lower(x) == lower( ::cAction )} )
+		
+		if nPos > 0
+			retu .t.
+		endif
+
+	cType := lower( cType )
+	
+	//	Lo mismo 'jwt' que 'token', lo se, lo se...
 	
 	DO CASE
 		CASE cType == 'jwt'
-			retu ::oMiddleware:Exec( SELF, cType, cRoute )
+			retu ::lAutenticate := ::oMiddleware:Exec( SELF, cType, cRoute, hError, lJson )
+			
+		CASE cType == 'token'
+			retu ::lAutenticate := ::oMiddleware:Exec( SELF, cType, cRoute, hError, lJson )			
 	
 		CASE cType == 'rool'				
 		
@@ -61,7 +82,7 @@ METHOD InitView( ) CLASS TController
 
 	::oView 			:= TView():New()
 	::oView:oRoute		:= ::oRoute					//	Xec oApp():oRoute !!!!
-	::oView:oResponse	:= ::oResponse
+	::oView:oResponse	:= App():oResponse 			//::oResponse
 	
 RETU NIL
 
@@ -70,6 +91,28 @@ METHOD View( cFile, ... ) CLASS TController
 	::oView:Exec( cFile, ... )
 
 RETU ''
+
+/*	
+	Como mod harbour aun no podemos crear un redirect correctamente, simularemos de esta manera
+	https://stackoverflow.com/questions/503093/how-do-i-redirect-to-another-webpage/506004#506004
+*/
+
+METHOD Redirect( cRoute ) CLASS TController
+
+	local oResponse 	:= App():oResponse
+	local cHtml := ''
+
+	cHtml += '<script>'
+	cHtml += "window.location.replace( '" + cRoute + "'); "
+	cHtml += '</script>'
+	
+	//	Ejecutamos el metodo SendHtml y si hay alguna cookie la enviare previamente...
+	
+		oResponse:SendHtml( cHtml )	
+
+RETU NIL
+
+
 
 METHOD ListController() CLASS TController
 

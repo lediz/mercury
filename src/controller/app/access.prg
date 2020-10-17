@@ -26,13 +26,13 @@ RETU NIL
 METHOD Autentica( o ) CLASS Access
 
 	LOCAL oMiddleware	:= o:oMiddleware
-	LOCAL oResponse	:= o:oResponse
+	LOCAL oResponse		:= o:oResponse
 	LOCAL oValidator 	:= TValidator():New()
-	LOCAL hRoles     	:= { 'user' => 'required|string|len:8', 'psw' => 'required' }	
+	LOCAL hRoles     	:= { 'user' => 'required|string|maxlen:8', 'psw' => 'required' }	
 	LOCAL cUser 		:= o:PostValue( 'user' )
-	LOCAL cPsw 		:= o:PostValue( 'psw' )
+	LOCAL cPsw 			:= o:PostValue( 'psw' )
 	LOCAL hReg 
-	LOCAL hUser	 	:= {=>}
+	LOCAL hUser	 		:= {=>}
 	LOCAL hTokenData 	:= {=>}
 	
 	//	IMPORTANTE: En este sistema JWT como enviamos una cookie con el JWT, no podremos hacer
@@ -73,7 +73,8 @@ METHOD Autentica( o ) CLASS Access
 			
 			//	Mostramos página principal
 			
-				o:View( 'app/principal.view', hTokenData )
+				//o:View( 'app/principal.view', hTokenData )
+				o:Redirect( Route( 'app.principal' ) )
 				
 		ELSE
 		
